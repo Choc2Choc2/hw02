@@ -1,117 +1,103 @@
 import os
 import sys
+from openai import OpenAI
 
-# 尝试导入 openai 库，如果没安装会提示用户
-try:
-    from openai import OpenAI
-except ImportError:
-    print("错误：未找到 'openai' 库。")
-    print("请先在终端运行：pip install openai")
-    sys.exit(1)
+# ================= 配置区域 (请在此处修改) =================
+
+# 1. 你的火山引擎 API Key (就是截图里那个 5aafedf1... 开头的)
+# 如果这里留空，程序运行时会提示你输入
+API_KEY = "" 
+
+# 2. 火山引擎 Base URL (固定地址)
+BASE_URL = "https://ark.cn-beijing.volces.com/api/v3"
+
+# 3. 模型名称 (非常重要！)
+# 请在火山引擎控制台 -> 推理接入点 页面查看
+# 通常格式是 "deepseek-r1-250120" 或者以 "ep-" 开头的接入点ID
+# 如果你不确定，先填 "deepseek-r1-250120" 试试，如果报错再改成你的接入点ID
+MODEL_NAME = "deepseek-r1-250528" 
+
+# =========================================================
 
 def get_api_key():
-    """
-    安全地获取 API Key。
-    优先从环境变量读取，如果没有，则提示用户输入（仅用于临时测试）。
-    """
-    # 尝试从环境变量获取 (推荐方式)
-    key = os.getenv("ARK_API_KEY")
+    """获取 API Key：优先使用代码里的，如果没有则让用户输入"""
+    if API_KEY:
+        return API_KEY
     
-    if key:
-        return key
-    
-    # 如果环境变量没有，为了让你能跑通，允许临时输入
-    # 注意：正式提交作业时，请确保通过环境变量配置，不要依赖这个输入
-    print("\n[警告] 未在系统环境变量中找到 ARK_API_KEY。")
-    print("为了演示，请在此处临时粘贴你的 API Key (以 sk- 开头)。")
-    print("提示：在 PowerShell 中运行 '$env:ARK_API_KEY=\"你的Key\"' 可永久设置本次会话的环境变量。")
-    temp_key = input("请输入 API Key: ").strip()
-    
-    if not temp_key.startswith("sk-"):
-        print("错误：API Key 格式不正确，必须以 sk- 开头。")
+    key = input("请输入火山引擎 API Key (例如 5aafedf1-...): ").strip()
+    if not key:
+        print("错误：API Key 不能为空！")
         sys.exit(1)
+    
+    # 注意：这里不再检查是否以 sk- 开头，兼容火山引擎格式
+    return key
+
+def chat_with_bot():
+    print(f"🤖 正在连接火山引擎 DeepSeek ({MODEL_NAME})...")
+    
+    try:
+        api_key = get_api_key()
         
-    return temp_key
-
-def main():
-    print("="*50)
-    print("欢迎使用 DeepSeek Chatbot (作业二演示版)")
-    print("="*50)
-
-    # 1. 获取配置
-    api_key = get_api_key()
-    
-    # 火山引擎的 Base URL (如果你的接入点在其他区域，请修改此处)
-    base_url = "https://ark.cn-beijing.volces.com/api/v3"
-    
-    # 模型名称 (请根据你在火山引擎控制台创建的接入点实际模型名称修改)
-    # 常见的是 deepseek-r1-250120 或 deepseek-v3
-    model_name = "deepseek-r1-250120" 
-
-    # 2. 初始化客户端
-    client = OpenAI(
-        api_key=api_key,
-        base_url=base_url
-    )
-
-    # 存储对话历史，让机器人有记忆
-    conversation_history = [
-        {"role": "system", "content": "你是一个有帮助的 AI 助手。"}
-    ]
-
-    print(f"\n已连接模型：{model_name}")
-    print("输入 'quit' 或 'exit' 退出程序。\n")
-
-    while True:
-        try:
-            # 3. 获取用户输入
-            user_input = input("👤 你: ").strip()
-
+        # 初始化客户端
+        client = OpenAI(
+            api_key=api_key,
+            base_url=BASE_URL
+        )
+        
+        # 简单的测试连接，确保 Key 和模型名正确
+        print("✅ 连接成功！开始对话 (输入 'quit' 或 'exit' 退出)")
+        print("-" * 40)
+        
+        messages = [
+            {"role": "system", "content": "你是一个有用的 AI 助手。"}
+        ]
+        
+        while True:
+            user_input = input("\n👤 你: ").strip()
+            
+            if user_input.lower() in ["quit", "exit", "q"]:
+                print("👋 再见！")
+                break
+            
             if not user_input:
                 continue
+                
+            # 添加用户消息
+            messages.append({"role": "user", "content": user_input})
             
-            if user_input.lower() in ['quit', 'exit', 'q']:
-                print("🤖 机器人: 再见！祝你学习愉快。")
-                break
-
-            # 4. 将用户消息加入历史
-            conversation_history.append({"role": "user", "content": user_input})
-
-            print("🤖 机器人正在思考...", end="\r")
-
-            # 5. 调用 API 发送请求
-            response = client.chat.completions.create(
-                model=model_name,
-                messages=conversation_history,
-                temperature=0.7,      # 创造性程度 (0-1)
-                max_tokens=1024,      # 最大回复长度
-                stream=False          # 是否流式输出 (False 为一次性返回)
-            )
-
-            # 6. 解析并打印回复
-            bot_reply = response.choices[0].message.content
-            
-            # 清除"正在思考"的提示
-            print(" " * 20, end="\r") 
-            print(f"🤖 机器人: {bot_reply}\n")
-
-            # 7. 将机器人回复加入历史，维持上下文
-            conversation_history.append({"role": "assistant", "content": bot_reply})
-
-        except Exception as e:
-            print("\n" + "!"*50)
-            print("发生错误！")
-            print(f"错误详情: {e}")
-            print("可能原因：")
-            print("1. API Key 无效或过期。")
-            print("2. 模型名称填写错误。")
-            print("3. 网络连接问题。")
-            print("4. 账户余额不足。")
-            print("!"*50 + "\n")
-            # 出错后不退出，让用户有机会重试或退出
-            choice = input("是否继续尝试？(y/n): ")
-            if choice.lower() != 'y':
-                break
+            try:
+                # 调用 API
+                response = client.chat.completions.create(
+                    model=MODEL_NAME,
+                    messages=messages,
+                    stream=False # 如果需要流式输出，可改为 True 并调整打印逻辑
+                )
+                
+                bot_reply = response.choices[0].message.content
+                
+                print(f"🤖 AI: {bot_reply}")
+                
+                # 将 AI 回复加入历史记录
+                messages.append({"role": "assistant", "content": bot_reply})
+                
+            except Exception as e:
+                print(f"\n❌ 请求出错: {e}")
+                print("💡 提示：请检查 API Key 是否正确，以及 MODEL_NAME 是否与控制台一致。")
+                # 出错时不退出，允许用户重试或修改输入
+                
+    except KeyboardInterrupt:
+        print("\n👋 程序被用户中断。")
+    except Exception as e:
+        print(f"\n💥 发生严重错误: {e}")
+        sys.exit(1)
 
 if __name__ == "__main__":
-    main()
+    # 检查是否安装了 openai 库
+    try:
+        import openai
+    except ImportError:
+        print("❌ 未找到 openai 库。请先运行以下命令安装：")
+        print("   pip install openai")
+        sys.exit(1)
+        
+    chat_with_bot()
